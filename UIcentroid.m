@@ -38,15 +38,31 @@ elseif ischar(GreenImage)
 end
 
 
-%% Select Centroids
+%% Determine color limits
 numConditions = size(Experiment.Mean,3);
-loc = nan(numConditions,2);
+CLim = nan(numConditions,2);
+if ~isempty(Experiment.ROI)
+    for cindex = 1:numConditions
+        temp = Experiment.Mean(:,:,cindex);
+        CLim(cindex,1) = min(temp(Experiment.ROI));
+        CLim(cindex,2) = max(temp(Experiment.ROI));
+    end
+else
+    for cindex = 1:numConditions
+        temp = Experiment.Mean(:,:,cindex);
+        CLim(cindex,1) = min(temp(:));
+        CLim(cindex,2) = max(temp(:));
+    end
+end
 
+
+%% Select Centroids
+loc = nan(numConditions,2);
 hF = figure('Name','Select Centroid','NumberTitle','off');
 for cindex = 1:numConditions
-    imagesc(Experiment.Mean(:,:,cindex));   % display image
+    imagesc(Experiment.Mean(:,:,cindex),CLim(cindex,:)); % display image
     axis off;
-    loc(cindex,:) = ginput(1);          % ui select centroid
+    loc(cindex,:) = ginput(1); % ui select centroid
 end
 
 

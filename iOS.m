@@ -18,7 +18,7 @@ gd.Experiment.timing.avgLast = gd.Experiment.timing.baselineDur+gd.Experiment.ti
 % Initialize Stimulus
 gd.Experiment.stim.frequency = 10;          %hz
 gd.Experiment.stim.wailDuration = 0.02;     %seconds
-gd.Experiment.stim.voltage = 5;            %volts
+gd.Experiment.stim.voltage = 5;             %volts
 gd.Experiment.stim.bidirectional = false;   %boolean
 
 % Initialize Imaging
@@ -33,8 +33,6 @@ gd.Experiment.GreenImage = [];
 gd.Internal.daq.samplingFrequency = 30000;
 gd.Internal.daq.piezos = table({true;true},{'Dev3';'Dev3'},{'ao0';'ao1'},'VariableNames',{'Active','Device','Port'});
 % gd.Internal.daq.camera = table({'Dev1'},{'port0/line2'},{'D'},'VariableNames',{'Device','Port','Type'});
-gd.Internal.camera.x = 1024;
-gd.Internal.camera.y = 1024;
 gd.Internal.isRunning = false;
 
 % Display parameters
@@ -75,7 +73,7 @@ gd.gui.file.base = uicontrol(...
     'Parent',               gd.gui.file.panel,...
     'Units',                'normalized',...
     'Position',             [.25,.3,.5,.5],...
-    'Callback',             @(hObject,eventdata)CreateFilename(guidata(hObject)));
+    'Callback',             @(hObject,eventdata)CreateFilename(guidata(hObject),true));
 gd.gui.file.baseText = uicontrol(...
     'Style',                'text',...
     'String',               'Basename',...
@@ -89,7 +87,7 @@ gd.gui.file.index = uicontrol(...
     'Parent',               gd.gui.file.panel,...
     'Units',                'normalized',...
     'Position',             [.8,.3,.15,.5],...
-    'Callback',             @(hObject,eventdata)CreateFilename(guidata(hObject)));
+    'Callback',             @(hObject,eventdata)CreateFilename(guidata(hObject),false));
 gd.gui.file.indexText = uicontrol(...
     'Style',                'text',...
     'String',               'File Index',...
@@ -151,6 +149,7 @@ gd.gui.control.capture = uicontrol(...
     'Parent',               gd.gui.control.panel,...
     'Units',                'normalized',...
     'Position',             [0,.4,1,.2],...
+    'BackgroundColor',      [1,0,0],...
     'Callback',             @(hObject,eventdata)CaptureImage(hObject, eventdata, guidata(hObject)));
 % live histogram
 gd.gui.control.histogram = uicontrol(...
@@ -166,7 +165,7 @@ gd.gui.control.selectROI = uicontrol(...
     'Parent',               gd.gui.control.panel,...
     'Units',                'normalized',...
     'Position',             [0,.1,1,.2],...
-    'Enable',              'on',...
+    'BackgroundColor',      [1,0,0],...
     'Callback',             @(hObject,eventdata)SelectROI(hObject, eventdata, guidata(hObject)));
 % use ROI
 gd.gui.control.ROItoggle = uicontrol(...
@@ -431,7 +430,7 @@ gd.gui.experiment.abort = uicontrol(...
 %     'Enable',               'off',...
 %     'Callback',             @(hObject,eventdata)SelectCentroids(hObject, eventdata, guidata(hObject)));
 
-gd = CreateFilename(gd);    % create initial filename
+gd = CreateFilename(gd,false);    % create initial filename
 try
     initCamera(gd);         % initialize camera
 catch
@@ -447,14 +446,27 @@ if ischar(temp)
     gd.Internal.save.path = temp;
     guidata(hObject, gd);
 end
-CreateFilename(gd);
+CreateFilename(gd,true);
 end
 
-function gd = CreateFilename(gd)
+function gd = CreateFilename(gd,reset)
+
+% Create filename
 gd.Internal.save.basename = fullfile(gd.Internal.save.path, get(gd.gui.file.base,'String'));
 gd.Internal.save.filename = strcat(gd.Internal.save.basename, '_', get(gd.gui.file.index,'String'));
 set(gd.gui.file.filename,'String',gd.Internal.save.filename);
+
+% Reset base
+if reset
+    set([gd.gui.control.capture,gd.gui.control.selectROI],'BackgroundColor',[1,0,0]);
+    set(gd.gui.control.selectROI,'UserData',[]);
+    set(gd.gui.control.ROItoggle,'Enable','off');
+    gd.Experiment.GreenImage = [];
+end
+
 guidata(gd.gui.fig, gd);
+
+% Check if file exists
 if exist([gd.Internal.save.filename,'.mat'], 'file')
     set(gd.gui.file.filename,'BackgroundColor',[1,0,0]);
 else
@@ -543,7 +555,7 @@ img = captureSingleFrame(gd);
 gd.Experiment.GreenImage = img;
 guidata(hObject,gd);
 imwrite(img,strcat(gd.Internal.save.basename,'_','green_image.tif')); %save to file (overwrites any previous image)
-set(hObject,'String','Capture Image');
+set(hObject,'String','Capture Image','BackgroundColor',[0,1,0]);
 end
 
 function img = captureSingleFrame(gd)
@@ -576,9 +588,8 @@ img = (img-min(img(:)))/range(img(:));
 h = figure;
 BW = roipoly(img);
 % BW = roipoly(single(img)./(2^12-1));
-close(h)
-set(hObject,'UserData',BW);
-guidata(hObject,gd);
+close(h);
+set(hObject,'UserData',BW,'BackgroundColor',[0,1,0]); % save ROI to UserData
 set(gd.gui.control.ROItoggle,'Enable','on');
 end
 
@@ -609,18 +620,24 @@ end
 
 function ViewTriggers(hObject, eventdata, gd)
 Fs = gd.Internal.daq.samplingFrequency;
-[Triggers,Stimulus] = generateTriggers(gd);
-x = 0:1/Fs:(size(Triggers,1)-1)/Fs;
+Triggers = generateTriggers(gd);
 figure('NumberTitle','off','Name','Single Trial Triggers'); hold on;
-Color = {'r','b','g'};
+Color = {'r','b','g','c'};
+x = [0,gd.Experiment.timing.baselineDur];
+y = [min(Triggers(:)),max(Triggers(:))];
+patch(x([1,1,2,2]),[y,flip(y)],Color{4},'EdgeAlpha',0,'FaceAlpha',.2);
+x = [gd.Experiment.timing.avgFirst,gd.Experiment.timing.avgLast];
+patch(x([1,1,2,2]),[y,flip(y)],Color{3},'EdgeAlpha',0,'FaceAlpha',.2);
+% area([0,gd.Experiment.timing.baselineDur],repmat(max(Triggers(:)),1,2),'FaceColor',Color{3},'EdgeColor',Color{3});
+% area([gd.Experiment.timing.avgFirst,gd.Experiment.timing.avgLast],repmat(max(Triggers(:)),1,2),'FaceColor',Color{4},'EdgeColor',Color{4});
+x = 0:1/Fs:(size(Triggers,1)-1)/Fs;
 for index = 1:2
     plot(x,Triggers(:,index),Color{index});
 end
-plot(x,Stimulus*max(Triggers(:)),Color{3});
 axis tight
 ylabel('Voltage');
 xlabel('Time (s)');
-legend('Piezo','Camera','Stimulus Period');
+legend('Baseline','Avg Period','Piezo','Camera');
 end
 
 function TestTriggers(hObject, eventdata, gd)
@@ -652,7 +669,7 @@ else
 end
 end
 
-function [Triggers,Stimulus] = generateTriggers(gd)
+function Triggers = generateTriggers(gd)
 t = gd.Experiment.timing;
 s = gd.Experiment.stim;
 Fs = gd.Internal.daq.samplingFrequency;
@@ -662,7 +679,6 @@ Fr = gd.Experiment.imaging.frameRate;
 trialDuration = t.baselineDur + t.stimDur + t.postDur;
 numScansPerTrial = round(trialDuration*Fs);
 Triggers = zeros(numScansPerTrial,2);
-Stimulus = zeros(numScansPerTrial,1);
 
 % Build piezo triggers
 piezoTrigs = generatePiezoTrig(s.wailDuration, s.bidirectional, s.frequency, ceil(t.stimDur*Fs), Fs);
@@ -670,7 +686,6 @@ piezoTrigs = piezoTrigs*s.voltage; % scale to proper voltage
 startTrig = round(t.baselineDur*Fs)+1;
 endTrig = startTrig+numel(piezoTrigs)-1;
 Triggers(startTrig:endTrig,1) = piezoTrigs;
-Stimulus(startTrig:endTrig) = 1;
 
 % Add camera triggers
 Triggers(1:ceil(Fs/Fr):end,2) = 1;
@@ -734,6 +749,7 @@ if get(hObject,'Value')
     guidata(hObject,gd);
     
     %% Initialize DAQ
+    Fs = gd.Internal.daq.samplingFrequency;
     
     % Determine active piezos
     PD = get(gd.gui.stim.piezos,'Data');
@@ -745,7 +761,7 @@ if get(hObject,'Value')
     
     % Initialize DAQ
     DAQ = daq.createSession('ni');
-    DAQ.Rate = gd.Internal.daq.samplingFrequency;
+    DAQ.Rate = Fs;
     % Piezos
     for index = find(ActivePiezos)
         [~,id] = DAQ.addAnalogOutputChannel(gd.Internal.daq.piezos.Device{index},gd.Internal.daq.piezos.Port{index},'Voltage');
@@ -756,27 +772,29 @@ if get(hObject,'Value')
     DAQ.Channels(id).Name = 'O_CameraTrigger';
     
     %% Create Triggers
-    [Triggers,Stimulus] = generateTriggers(gd);
-    numFrames = sum(Triggers(:,2)==1);
-    numStimFrames = sum(Triggers(Stimulus==1,2)==1);
-    numBaselineFrames = numFrames-numStimFrames;    
-    
-    %% Run Experiment
     
     % Initialize Experiment struct
     Experiment = gd.Experiment;
     Experiment.filename = gd.Internal.save.filename;    % record file saved to
     Experiment.timing.init = datestr(now);              % record date & time information
     
+    % Create triggers
+    Triggers = generateTriggers(gd);
+    numFrames = sum(Triggers(:,2)==1);
+    numBaselineFrames = sum(Triggers(1:round(Experiment.timing.baselineDur*Fs),2));
+    frameTime = find(Triggers(:,2)==1)/Fs;
+    
+    %% Run Experiment
+
     % Update gui
     set(hObject,'String','Stop & Save');
     
     % Initialize display
-    temp_img = zeros(gd.Internal.imaging.vid.Videoresolution);
-    hImage = image(temp_img,'Parent',gd.gui.axes.second);
-    % axes(handles.resp_ratio_axes)
+    dim = gd.Internal.imaging.vid.Videoresolution;
+    image(zeros(dim),'Parent',gd.gui.axes.second); axis off;
+    image(zeros(dim),'Parent',gd.gui.axes.third); axis off;
     
-    delta = nan(gd.Internal.camera.y, gd.Internal.camera.x, numConditions, numFrames, gd.gui.timing.numTrials);
+    delta = nan(dim(1), dim(2), numConditions, numFrames, gd.gui.timing.numTrials);
     tindex = 1;
     while tindex < gd.gui.timing.numTrials && get(hObject,'Value') && ~get(gd.gui.experiment.abort,'Value')
         for cindex = 1:numConditions
@@ -796,12 +814,15 @@ if get(hObject,'Value')
             % Stop camera & gather frames
             % stoppreview(gd.Internal.imaging.vid);
             stop(gd.Internal.imaging.vid);
+            time = tic;
             vid_data = getdata(gd.Internal.imaging.vid,gd.Internal.imaging.vid.FramesAvailable);
             
             % Analyze frames
             baseline = mean(vid_data(:,:,1,1:numBaselineFrames),4);
             delta(:,:,cindex,:,tindex) = bsxfun(@rdivide,bsxfun(@minus,vid_data(:,:,1,:),baseline),baseline);
-            Mean = nanmean(nanmean(delta(:,:,cindex,numBaselineFrames+1:end,:),5),4); % mean across trials, then across frames
+            first = find(frameTime>=str2num(get(gd.gui.timing.avgFirst,'String')),1);
+            last = find(frameTime<=str2num(get(gd.gui.timing.avgLast,'String')),1,'last');
+            Mean = nanmean(nanmean(delta(:,:,cindex,first:last,:),5),4); % mean across trials, then across frames
             
             % Display updated images
             axes(gd.gui.axes.second);
@@ -815,11 +836,12 @@ if get(hObject,'Value')
             % Check if need to restart
             if get(gd.gui.experiment.restart,'Value')
                 fprintf('User Restarted\n');
-                Experiment.Trials = cell(1,numConditions);
+                delta = nan(dim(1), dim(2), numConditions, numFrames, gd.gui.timing.numTrials);
                 tindex = 1;
                 set(gd.gui.experiment.restart,'Value',false);
             end
             
+            pause(toc(time)-Experiment.timing.ITI); % pause rest of ITI
         end %condition
         tindex = tindex + 1;
     end %trials
@@ -829,12 +851,14 @@ if get(hObject,'Value')
         
         % Save outputs to struct
         Experiment.timing.numTrials = tindex-1;
+        Experiment.timing.avgFirst = find(frameTime>=str2num(get(gd.gui.timing.avgFirst,'String')),1);
+        Experiment.timing.avgLast = find(frameTime<=str2num(get(gd.gui.timing.avgLast,'String')),1,'Last');
         Experiment.ROI = get(gd.gui.control.selectROI,'UserData');
         Experiment.Trial = nanmean(delta,5);
-        Experiment.Mean = mean(Experiment.Trial(:,:,:,numBaselineFrames+1:end),4);
+        Experiment.Mean = mean(Experiment.Trial(:,:,:,Experiment.timing.avgFirst:Experiment.timing.avgLast),4);
         
         % Save outputs to files
-        fprintf('Saving data to file...');
+        fprintf('Saving %d trials to file...',Experiment.timing.numTrials);
         save([Experiment.filename,'.mat'],'Experiment');
         for cindex = 1:numConditions
             imwrite(Experiment.Mean(:,:,cindex),[Experiment.filename,'_cond',num2str(cindex),'.tif']);
@@ -846,7 +870,7 @@ if get(hObject,'Value')
         
         % Update GUI
         set(gd.gui.file.index,'String',num2str(str2num(get(gd.gui.file.index,'String'))+1)); % update index
-        CreateFilename(gd); % update filename
+        CreateFilename(gd,false); % update filename
         
     else % user aborted
         fprintf('User Aborted\n');
@@ -859,6 +883,7 @@ if get(hObject,'Value')
     set([gd.gui.experiment.abort,gd.gui.experiment.restart],'Enable','off');
     guidata(hObject,gd);
     set(hObject,'String','Run');
+    
 else
     set(hObject,'String','Stopping...');
 end
