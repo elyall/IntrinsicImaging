@@ -123,8 +123,41 @@ axis off
 gd.gui.axes.second = axes(...
     'Parent',               gd.gui.axes.panel,...
     'Units',                'normalized',...
-    'Position',             [.33,0,.34,.9]);
+    'Position',             [.33,.1,.34,.8]);
 axis off
+% slider to select frame
+gd.gui.axes.slider = uicontrol(...
+    'Style',                'slider',...
+    'Parent',               gd.gui.axes.panel,...
+    'Units',                'normalized',...
+    'Position',             [.38,.9,.29,.1],...
+    'Enable',               'off',...
+    'Callback',             @(hObject,eventdata)set(get(hObject,'UserData'),'String',num2str(round(hObject.Value))));
+gd.gui.axes.sliderText = uicontrol(...
+    'Style',                'text',...
+    'String',               '',...
+    'Parent',               gd.gui.axes.panel,...
+    'Units',                'normalized',...
+    'Position',             [.33,.9,.05,.1]);
+set(gd.gui.axes.slider,'UserData',gd.gui.axes.sliderText);
+% button to set first
+gd.gui.axes.avgFirst = uicontrol(...
+    'Style',                'pushbutton',...
+    'String',               'First',...
+    'Parent',               gd.gui.axes.panel,...
+    'Units',                'normalized',...
+    'Position',             [.33,0,.17,.1],...
+    'Enable',               'off',...
+    'Callback',             @(hObject,eventdata)SetImage(hObject, eventdata, guidata(hObject)));
+% button to set last
+gd.gui.axes.avgLast = uicontrol(...
+    'Style',                'pushbutton',...
+    'String',               'Last',...
+    'Parent',               gd.gui.axes.panel,...
+    'Units',                'normalized',...
+    'Position',             [.5,0,.17,.1],...
+    'Enable',               'off',...
+    'Callback',             @(hObject,eventdata)SetImage(hObject, eventdata, guidata(hObject)));
 % third axes
 gd.gui.axes.third = axes(...
     'Parent',               gd.gui.axes.panel,...
@@ -799,6 +832,7 @@ if get(hObject,'Value')
     
     %% Update GUI
     set([gd.gui.experiment.abort,gd.gui.experiment.restart],'Enable','on');
+    set([gd.gui.axes.slider,gd.gui.axes.avgFirst,gd.gui.axes.avgLast],'Enable','on');
     gd.Internal.isRunning = true;
     guidata(hObject,gd);
     numConditions = nnz(ActivePiezos);
@@ -822,15 +856,16 @@ if get(hObject,'Value')
     
     % Initialize Experiment struct
     Experiment = gd.Experiment;
-    Experiment.filename = gd.Internal.save.filename;    % record file saved to
-    Experiment.timing.init = datestr(now);              % record date & time information
+    gd.Experiment.filename = gd.Internal.save.filename;    % record file saved to
+    gd.Experiment.timing.init = datestr(now);              % record date & time information
     
     % Create triggers
     Triggers = generateTriggers(gd);
     numFrames = sum(Triggers(:,2)==1);
-    numBaselineFrames = sum(Triggers(1:round(Experiment.timing.baselineDur*Fs),2));
+    numBaselineFrames = sum(Triggers(1:round(gd.Experiment.timing.baselineDur*Fs),2));
     frameTime = find(Triggers(:,2)==1)/Fs;
-    % frameTime(1:numBaselineFrames) = []; % remove baseline frames if they're not being saved
+    first = find(frameTime>=str2num(get(gd.gui.experiment.avgFirst,'String')),1);
+            last = find(frameTime<=str2num(get(gd.gui.experiment.avgLast,'String')),1,'last');
     
     %% Run Experiment
 
@@ -842,7 +877,7 @@ if get(hObject,'Value')
     axes(gd.gui.axes.second); image(zeros(dim)); axis off;
     axes(gd.gui.axes.third); image(zeros(dim)); axis off;
     
-    delta = zeros(dim(1)/2,dim(2)/2,numConditions,numFrames, 'double'); % numFrames-numBaselineFrames
+    gd.Experiment.Trial = zeros(dim(1)/2,dim(2)/2,numConditions,numFrames, 'double'); % numFrames-numBaselineFrames
     tindex = 1;
     while tindex < str2double(get(gd.gui.experiment.numTrials,'String')) && get(hObject,'Value') && ~get(gd.gui.experiment.abort,'Value')
         for cindex = 1:numConditions
@@ -870,15 +905,14 @@ if get(hObject,'Value')
             % Analyze frames
             baseline = mean(vid_data(:,:,1,1:numBaselineFrames),4);
             if tindex == 1
-                delta(:,:,cindex,:) = bsxfun(@rdivide,bsxfun(@minus,vid_data(:,:,1,:),baseline),baseline);
+                gd.Experiment.Trial(:,:,cindex,:) = bsxfun(@rdivide,bsxfun(@minus,vid_data(:,:,1,:),baseline),baseline);
             elseif tindex <= 10
-                delta(:,:,cindex,:) = (tindex-1)/tindex*delta(:,:,cindex,:) + 1/tindex*bsxfun(@rdivide,bsxfun(@minus,vid_data(:,:,1,:),baseline),baseline); %numBaselineFrames+1:end
+                gd.Experiment.Trial(:,:,cindex,:) = (tindex-1)/tindex*gd.Experiment.Trial(:,:,cindex,:) + 1/tindex*bsxfun(@rdivide,bsxfun(@minus,vid_data(:,:,1,:),baseline),baseline); %numBaselineFrames+1:end
             else
-                delta(:,:,cindex,:) = .9*delta(:,:,cindex,:) + .1*bsxfun(@rdivide,bsxfun(@minus,vid_data(:,:,1,:),baseline),baseline);
+                gd.Experiment.Trial(:,:,cindex,:) = .9*gd.Experiment.Trial(:,:,cindex,:) + .1*bsxfun(@rdivide,bsxfun(@minus,vid_data(:,:,1,:),baseline),baseline);
             end
-            first = find(frameTime>=str2num(get(gd.gui.experiment.avgFirst,'String')),1);
-            last = find(frameTime<=str2num(get(gd.gui.experiment.avgLast,'String')),1,'last');
-            Mean = mean(delta(:,:,cindex,first:last),4); % mean across trials, then across frames
+            guidata(hObject,gd);
+            
             
             % Display updated images
             axes(gd.gui.axes.second);
@@ -901,23 +935,23 @@ if get(hObject,'Value')
                 break
             end
             
-            pause(toc(time)-Experiment.timing.ITI); % pause rest of ITI
+            pause(toc(time)-gd.Experiment.timing.ITI); % pause rest of ITI
         end %condition
         tindex = tindex + 1;
     end %trials
-    if size(delta,5) >= tindex
-        delta(:,:,:,:,tindex:end) = [];
+    if size(gd.Experiment.Trial,5) >= tindex
+        gd.Experiment.Trial(:,:,:,:,tindex:end) = [];
     end
     
     % Save results
     if ~get(gd.gui.experiment.abort,'Value')
         
         % Save outputs to struct
+        Experiment = gd.Experiment;
         Experiment.timing.numTrials = tindex-1;
         Experiment.timing.avgFirst = find(frameTime>=str2num(get(gd.gui.experiment.avgFirst,'String')),1);
         Experiment.timing.avgLast = find(frameTime<=str2num(get(gd.gui.experiment.avgLast,'String')),1,'Last');
         Experiment.ROI = get(gd.gui.control.selectROI,'UserData');
-        Experiment.Trial = delta;
         Experiment.Mean = mean(Experiment.Trial(:,:,:,Experiment.timing.avgFirst:Experiment.timing.avgLast),4);
         
         % Save outputs to files
@@ -953,3 +987,8 @@ else
 end
 end
 
+function SetImage(hObject, eventdata, gd)
+Mean = mean(gd.Experiment.Trial(:,:,cindex,first:last),4); % mean across trials, then across frames
+axes(gd.gui.axes.third);
+if 
+end
