@@ -62,6 +62,7 @@ end
 numConditions = size(Mean,3);
 CLim = nan(numConditions,2);
 if ~isempty(ROI)
+    pos = bwboundaries(ROI);
     for cindex = 1:numConditions
         temp = Mean(:,:,cindex);
         CLim(cindex,1) = min(temp(ROI));
@@ -81,14 +82,17 @@ loc = nan(numConditions,2);
 hF = figure('Name','Select Centroid','NumberTitle','off');
 for cindex = 1:numConditions
     imagesc(Mean(:,:,cindex),CLim(cindex,:)); % display image
-    axis off;
+    axis off; colormap gray;
+    hold on; 
+    plot(pos{1}([1:end,1],2),pos{1}([1:end,1],1),'r-');
+    hold off;
     loc(cindex,:) = ginput(1); % ui select centroid
 end
 
 
 %% Display final image
 figure(hF);
-imagesc(GreenImage); hold on; axis off;
+imagesc(GreenImage); hold on; axis off; colormap gray;
 for cindex = 1:numConditions
     plot(loc(cindex,1),loc(cindex,2),'ro'); % overlay centroid
 end

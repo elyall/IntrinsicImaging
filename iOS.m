@@ -1,67 +1,121 @@
-function iOS
+function iOS(numConditions)
+
+if ~exist('numConditions','var')
+    numConditions = 2;
+end
 
 % Initialize Saving
 gd.Internal.save.path = cd;
-gd.Internal.save.base = '0000_c2';
+gd.Internal.save.base = '0000_c1c2';
 gd.Internal.save.index = '1';
-% gd.Internal.save.filename = fullfile(gd.Internal.save.path, strcat(gd.Internal.save.base, gd.Internal.save.index));
 
 % Initialize Timing
-gd.Experiment.timing.baselineDur = .5;      %seconds
+gd.Experiment.timing.baselineDur = 2;       %seconds
 gd.Experiment.timing.stimDur = 4;           %seconds
 gd.Experiment.timing.postDur = 1;           %seconds
-gd.Experiment.timing.ITI = 6;               %seconds
+gd.Experiment.timing.ITI = 25;              %seconds
 gd.Experiment.timing.numTrials = 35;
-gd.Experiment.timing.avgFirst = 2.5;
-gd.Experiment.timing.avgLast = 5.5;
+gd.Experiment.timing.avgFirst = 2.5;        %seconds
+gd.Experiment.timing.avgLast = 7;           %seconds
 % gd.Experiment.timing.avgFirst = gd.Experiment.timing.baselineDur;
 % gd.Experiment.timing.avgLast = gd.Experiment.timing.baselineDur+gd.Experiment.timing.stimDur+gd.Experiment.timing.postDur;
 
 % Initialize Stimulus
 gd.Experiment.stim.frequency = 10;          %hz
-gd.Experiment.stim.wailDuration = 0.02;     %seconds
+gd.Experiment.stim.wailDuration = 0.0499;   %seconds
 gd.Experiment.stim.voltage = 5;             %volts
 gd.Experiment.stim.bidirectional = true;    %boolean
+if numConditions == 1
+    gd.Internal.daq.piezos = table({true},{'Dev3'},{'ao0'},'VariableNames',{'Active','Device','Port'});
+elseif numConditions == 2
+    gd.Internal.daq.piezos = table({true;true},{'Dev3';'Dev3'},{'ao0';'ao1'},'VariableNames',{'Active','Device','Port'});
+end
 
 % Initialize Imaging
 gd.Internal.imaging.port = 'COM5';
 gd.Internal.imaging.initFile = 'C:\Users\User\Documents\MATLAB\iOS\CamFiles\T_1m60_12-bits_2_tap_ext_trig.ccf';
+gd.Internal.imaging.dim = [512,512];
+gd.Internal.imaging.subsampleFactor = 2;
 gd.Experiment.imaging.frameRate = 59;   %hz
-gd.Experiment.GreenImage = [];
-% gd.Experiment.imaging.gain = 0;
-% gd.Experiment.imaging.exposure = 0;
+gd.Experiment.imaging.numFrames2Avg = floor(59/2); % half second averaging of frames
+gd.Experiment.GreenImage = zeros(gd.Internal.imaging.dim);
 
 % Default Settings
+gd.Experiment.Trial = [];
 gd.Internal.daq.samplingFrequency = 30000;
-gd.Internal.daq.piezos = table({true;true},{'Dev3';'Dev3'},{'ao0';'ao1'},'VariableNames',{'Active','Device','Port'});
-% gd.Internal.daq.camera = table({'Dev1'},{'port0/line2'},{'D'},'VariableNames',{'Device','Port','Type'});
 gd.Internal.isRunning = false;
 gd.Internal.viewHandle = [];
+gd.Internal.ROI.pos = [];
+gd.Internal.ROI.handle = [];
 
 % Display parameters
-Display.units = 'pixels';
-Display.position = [100, 100, 1000, 600];
+gd.Internal.Display.units = 'normalized';
+gd.Internal.Display.position = [.225, .15, .5, .75];
+
+
+%% GREG'S SETTINGS
+% gd.Experiment.timing.baselineDur = 1;       %seconds
+% gd.Experiment.timing.stimDur = 1.5;         %seconds
+% gd.Experiment.timing.postDur = 1.5;         %seconds
+% gd.Experiment.timing.ITI = 8;               %seconds
+% gd.Experiment.timing.numTrials = 35;
+% gd.Experiment.timing.avgFirst = 1;          %seconds
+% gd.Experiment.timing.avgLast = 4;           %seconds
+% gd.Experiment.stim.frequency = 20;          %hz
+% gd.Experiment.stim.wailDuration = 0.02;     %seconds
+% gd.Experiment.stim.voltage = 5;             %volts
+% gd.Experiment.stim.bidirectional = false;   %boolean
 
 
 %% Generate GUI
+fprintf('Starting up...\n');
 
 % Create figure
 gd.gui.fig = figure(...
     'NumberTitle',          'off',...
     'Name',                 'Intrinsic Optical Signal Imaging',...
-    'Units',                Display.units,...
-    'Position',             Display.position,...
+    'Units',                gd.Internal.Display.units,...
+    'Position',             gd.Internal.Display.position,...
     'ToolBar',              'none',...
     'MenuBar',              'none',...
     'Visible',              'off');
 
-% Create file selection
-% panel
+% Panels
 gd.gui.file.panel = uipanel(...
     'Title',                'File Information',...
     'Parent',               gd.gui.fig,...
     'Units',                'Normalized',...
-    'Position',             [0, .8, 1, .2]);
+    'Position',             [0, .9, 1, .1]);
+gd.gui.control.panel = uipanel(...
+    'Title',                'Prep',...
+    'Parent',               gd.gui.fig,...
+    'Units',                'Normalized',...
+    'Position',             [0,0,.4,.6]);
+gd.gui.timing.panel = uipanel(...
+    'Title',                'Timing',...
+    'Parent',               gd.gui.fig,...
+    'Units',                'Normalized',...
+    'Position',             [0,.6,.25,.3]);
+gd.gui.stim.panel = uipanel(...
+    'Title',                'Stimulus',...
+    'Parent',               gd.gui.fig,...
+    'Units',                'Normalized',...
+    'Position',             [.25,.6,.35,.3]);
+gd.gui.experiment.panel = uipanel(...
+    'Title',                'Experiment',...
+    'Parent',               gd.gui.fig,...
+    'Units',                'Normalized',...
+    'Position',             [.6,.6,.4,.3]);
+for cindex = 1:numConditions
+    gd.gui.data(cindex).panel = uipanel(...
+        'Title',                sprintf('Stimulus %d',cindex),...
+        'Parent',               gd.gui.fig,...
+        'Units',                'Normalized',...
+        'Position',             [.4,.6-cindex*.6/numConditions,.6,.6/numConditions]);
+end
+
+% File selection
+
 % select directory
 gd.gui.file.dir = uicontrol(...
     'Style',                'pushbutton',...
@@ -76,75 +130,45 @@ gd.gui.file.base = uicontrol(...
     'String',               gd.Internal.save.base,...
     'Parent',               gd.gui.file.panel,...
     'Units',                'normalized',...
-    'Position',             [.25,.3,.5,.5],...
+    'Position',             [.3,.4,.4,.6],...
     'Callback',             @(hObject,eventdata)CreateFilename(guidata(hObject),true));
 gd.gui.file.baseText = uicontrol(...
     'Style',                'text',...
     'String',               'Basename',...
     'Parent',               gd.gui.file.panel,...
     'Units',                'normalized',...
-    'Position',             [.25,.8,.5,.2]);
+    'Position',             [.2,.4,.1,.6]);
 % file index
 gd.gui.file.index = uicontrol(...
     'Style',                'edit',...
     'String',               gd.Internal.save.index,...
     'Parent',               gd.gui.file.panel,...
     'Units',                'normalized',...
-    'Position',             [.8,.3,.15,.5],...
+    'Position',             [.8,.4,.2,.6],...
     'Callback',             @(hObject,eventdata)CreateFilename(guidata(hObject),false));
 gd.gui.file.indexText = uicontrol(...
     'Style',                'text',...
     'String',               'File Index',...
     'Parent',               gd.gui.file.panel,...
     'Units',                'normalized',...
-    'Position',             [.8,.8,.15,.2]);
+    'Position',             [.7,.4,.1,.6]);
 % display filename
 gd.gui.file.filename = uicontrol(...
     'Style',                'text',...
     'String',               '',...
     'Parent',               gd.gui.file.panel,...
     'Units',                'normalized',...
-    'Position',             [.2,.05,.8,.2]);
+    'Position',             [.2,0,.8,.35]);
 
-% Create axes
-% panel
-gd.gui.axes.panel = uipanel(...
-    'Title',                'Images',...
-    'Parent',               gd.gui.fig,...
-    'Units',                'Normalized',...
-    'Position',             [0, .4, 1, .4]);
-% first axes
-gd.gui.axes.first = axes(...
-    'Parent',               gd.gui.axes.panel,...
-    'Units',                'normalized',...
-    'Position',             [0,0,.33,1]);
-axis off
-% second axes
-gd.gui.axes.second = axes(...
-    'Parent',               gd.gui.axes.panel,...
-    'Units',                'normalized',...
-    'Position',             [.33,0,.34,.9]);
-axis off
-% third axes
-gd.gui.axes.third = axes(...
-    'Parent',               gd.gui.axes.panel,...
-    'Units',                'normalized',...
-    'Position',             [.66,0,.33,1]);
-axis off
+% Image control
 
-% Create image control
-gd.gui.control.panel = uipanel(...
-    'Title',                'Prep',...
-    'Parent',               gd.gui.fig,...
-    'Units',                'Normalized',...
-    'Position',             [0,0,.15,.4]);
 % preview
 gd.gui.control.preview = uicontrol(...
     'Style',                'togglebutton',...
     'String',               'Preview',...
     'Parent',               gd.gui.control.panel,...
     'Units',                'normalized',...
-    'Position',             [0,.8,1,.2],...
+    'Position',             [0,.9,.33,.1],...
     'Callback',             @(hObject,eventdata)PreviewImage(hObject, eventdata, guidata(hObject)));
 % capture image
 gd.gui.control.capture = uicontrol(...
@@ -152,40 +176,28 @@ gd.gui.control.capture = uicontrol(...
     'String',               'Capture Image',...
     'Parent',               gd.gui.control.panel,...
     'Units',                'normalized',...
-    'Position',             [0,.4,1,.2],...
-    'BackgroundColor',      [1,0,0],...
+    'Position',             [.33,.9,.34,.1],...
+    'BackgroundColor',      [0,1,0],...
     'Callback',             @(hObject,eventdata)CaptureImage(hObject, eventdata, guidata(hObject)));
-% live histogram
-gd.gui.control.histogram = uicontrol(...
-    'Style',                'checkbox',...
-    'String',               'Histogram',...
-    'Parent',               gd.gui.control.panel,...
-    'Units',                'normalized',...
-    'Position',             [0,.7,.7,.1]);
 % select ROI
-gd.gui.control.selectROI = uicontrol(...
-    'Style',                'pushbutton',...
+gd.gui.control.ROI = uicontrol(...
+    'Style',                'togglebutton',...
     'String',               'Select ROI',...
     'Parent',               gd.gui.control.panel,...
     'Units',                'normalized',...
-    'Position',             [0,.1,1,.2],...
-    'BackgroundColor',      [1,0,0],...
+    'Position',             [.67,.9,.33,.1],...
+    'Enable',               'off',...
     'Callback',             @(hObject,eventdata)SelectROI(hObject, eventdata, guidata(hObject)));
-% use ROI
-gd.gui.control.ROItoggle = uicontrol(...
-    'Style',                'checkbox',...
-    'String',               'Use ROI?',...
+% axis
+gd.gui.control.axes = axes(...
     'Parent',               gd.gui.control.panel,...
     'Units',                'normalized',...
-    'Enable',               'off',...
-    'Position',             [0,0,1,.1]);
+    'UserData',             cindex,...
+    'Position',             [0,0,1,.9]);
+axis off
 
-% Create timing control
-gd.gui.timing.panel = uipanel(...
-    'Title',                'Timing',...
-    'Parent',               gd.gui.fig,...
-    'Units',                'Normalized',...
-    'Position',             [.15,0,.2,.4]);
+% Timing control
+
 % Baseline duration
 gd.gui.timing.baselineDur = uicontrol(...
     'Style',                'edit',...
@@ -250,13 +262,37 @@ gd.gui.timing.ITIText = uicontrol(...
     'HorizontalAlignment',  'right',...
     'Units',                'normalized',...
     'Position',             [0,.4,.65,.1]);
+% Frames to average
+gd.gui.timing.avgFirst = uicontrol(...
+    'Style',                'edit',...
+    'Parent',               gd.gui.timing.panel,...
+    'String',               gd.Experiment.timing.avgFirst,...
+    'Units',                'normalized',...
+    'Position',             [.4,.15,.3,.15],...
+    'UserData',             {'timing','avgFirst', 0, []},...
+    'Callback',             @(hObject,eventdata)ChangeStim(hObject, eventdata, guidata(hObject)));
+gd.gui.timing.avgLast = uicontrol(...
+    'Style',                'edit',...
+    'Parent',               gd.gui.timing.panel,...
+    'String',               gd.Experiment.timing.avgLast,...
+    'Units',                'normalized',...
+    'Position',             [.7,.15,.3,.15],...
+    'UserData',             {'timing','avgLast', 0, []},...
+    'Callback',             @(hObject,eventdata)ChangeStim(hObject, eventdata, guidata(hObject)));
+gd.gui.experiment.avgText = uicontrol(...
+    'Style',                'text',...
+    'Parent',               gd.gui.timing.panel,...
+    'String',               'Average (s)',...
+    'HorizontalAlignment',  'center',...
+    'Units',                'normalized',...
+    'Position',             [0,.15,.4,.1]);
 % Frame rate
 gd.gui.timing.frameRate = uicontrol(...
     'Style',                'edit',...
     'Parent',               gd.gui.timing.panel,...
     'String',               gd.Experiment.imaging.frameRate,...
     'Units',                'normalized',...
-    'Position',             [.7,.1,.3,.15],...
+    'Position',             [.7,0,.3,.15],...
     'UserData',             {'imaging','frameRate', 0, 59},...
     'Callback',             @(hObject,eventdata)ChangeStim(hObject, eventdata, guidata(hObject)));
 gd.gui.timing.frameRateText = uicontrol(...
@@ -265,15 +301,11 @@ gd.gui.timing.frameRateText = uicontrol(...
     'String',               'Frame Rate (Hz)',...
     'HorizontalAlignment',  'right',...
     'Units',                'normalized',...
-    'Position',             [0,.1,.65,.1]);
+    'Position',             [0,0,.65,.1]);
 
-% Create stimulus control
-gd.gui.stim.panel = uipanel(...
-    'Title',                'Stimulus',...
-    'Parent',               gd.gui.fig,...
-    'Units',                'Normalized',...
-    'Position',             [.35,0,.3,.4]);
-% Piezo 2 toggle
+% Stimulus control
+
+% Piezo toggle
 gd.gui.stim.piezos = uitable(...
     'Parent',               gd.gui.stim.panel,...
     'Units',                'normalized',...
@@ -363,60 +395,45 @@ gd.gui.stim.test = uicontrol(...
     'Position',             [.5,0,.5,.2],...
     'Callback',             @(hObject,eventdata)TestTriggers(hObject, eventdata, guidata(hObject)));
 
-% Create experiment control
-gd.gui.experiment.panel = uipanel(...
-    'Title',                'Experiment',...
-    'Parent',               gd.gui.fig,...
-    'Units',                'Normalized',...
-    'Position',             [.65,0,.35,.4]); % [.6,.1,.4,.3]
+% Experiment control
+
+% Link
+gd.gui.experiment.link = uicontrol(...
+    'Style',                'checkbox',...
+    'Parent',               gd.gui.experiment.panel,...
+    'String',               'Link?',...
+    'Units',                'normalized',...
+    'Position',             [0,.85,.5,.15],...
+    'Enable',               'off',...
+    'Value',                true,...
+    'Callback',             @(hObject,eventdata)Link(hObject, eventdata, guidata(hObject)));
+if numConditions == 1
+    set(gd.gui.experiment.link,'Visible','off');
+end
 % Number of Trials
 gd.gui.experiment.numTrials = uicontrol(...
     'Style',                'edit',...
     'Parent',               gd.gui.experiment.panel,...
     'String',               gd.Experiment.timing.numTrials,...
     'Units',                'normalized',...
-    'Position',             [0,.7,.5,.15],...
+    'Position',             [.7,.85,.3,.15],...
     'UserData',             {'timing','numTrials', 1, []},...
     'Callback',             @(hObject,eventdata)ChangeStim(hObject, eventdata, guidata(hObject)));
 gd.gui.experiment.numTrialsText = uicontrol(...
     'Style',                'text',...
     'Parent',               gd.gui.experiment.panel,...
     'String',               '# Trials',...
-    'HorizontalAlignment',  'center',...
+    'HorizontalAlignment',  'right',...
     'Units',                'normalized',...
-    'Position',             [0,.85,.5,.1]);
-% Frames to average
-gd.gui.experiment.avgFirst = uicontrol(...
-    'Style',                'edit',...
-    'Parent',               gd.gui.experiment.panel,...
-    'String',               gd.Experiment.timing.avgFirst,...
-    'Units',                'normalized',...
-    'Position',             [0,.4,.25,.15],...
-    'UserData',             {'timing','avgFirst', 0, []},...
-    'Callback',             @(hObject,eventdata)ChangeStim(hObject, eventdata, guidata(hObject)));
-gd.gui.experiment.avgLast = uicontrol(...
-    'Style',                'edit',...
-    'Parent',               gd.gui.experiment.panel,...
-    'String',               gd.Experiment.timing.avgLast,...
-    'Units',                'normalized',...
-    'Position',             [.25,.4,.25,.15],...
-    'UserData',             {'timing','avgLast', 0, []},...
-    'Callback',             @(hObject,eventdata)ChangeStim(hObject, eventdata, guidata(hObject)));
-gd.gui.experiment.avgText = uicontrol(...
-    'Style',                'text',...
-    'Parent',               gd.gui.experiment.panel,...
-    'String',               'Average Range (s)',...
-    'HorizontalAlignment',  'center',...
-    'Units',                'normalized',...
-    'Position',             [0,.55,.5,.1]);
+    'Position',             [.5,.85,.2,.1]);
 % Run experiment
 gd.gui.experiment.run = uicontrol(...
     'Style',                'togglebutton',...
     'String',               'Run',...
     'Parent',               gd.gui.experiment.panel,...
     'Units',                'normalized',...
-    'Position',             [.5,.7,.5,.3],...
-    'BackgroundColor',      'green',...
+    'Position',             [0,.5,1,.35],...
+    'Enable',               'off',...
     'Callback',             @(hObject,eventdata)RunExperiment(hObject, eventdata, guidata(hObject)));
 % Restart experiment
 gd.gui.experiment.restart = uicontrol(...
@@ -424,39 +441,83 @@ gd.gui.experiment.restart = uicontrol(...
     'String',               'Restart',...
     'Parent',               gd.gui.experiment.panel,...
     'Units',                'normalized',...
-    'Position',             [.5,.35,.5,.3],...
+    'Position',             [0,.25,1,.25],...
     'Enable',               'off');
-% Abort experiment
-gd.gui.experiment.abort = uicontrol(...
-    'Style',                'togglebutton',...
-    'String',               'Abort',...
+
+% Identify centroids
+gd.gui.experiment.save = uicontrol(...
+    'Style',                'pushbutton',...
+    'String',               'Save & Mark',...
     'Parent',               gd.gui.experiment.panel,...
     'Units',                'normalized',...
-    'Position',             [.5,0,.5,.3],...
-    'Enable',               'off');
+    'Position',             [0,0,1,.25],...
+    'Enable',               'off',...
+    'Callback',             @(hObject,eventdata)Save(hObject, eventdata, guidata(hObject)));
 
-% % Create post processing
-% gd.gui.post.panel = uipanel(...
-%     'Title',                'Post-processing',...
-%     'Parent',               gd.gui.fig,...
-%     'Units',                'Normalized',...
-%     'Position',             [.6,0,.4,.1]);
-% gd.gui.post.centroids = uicontrol(...
-%     'Style',                'pushbutton',...
-%     'String',               'Select Centroids',...
-%     'Parent',               gd.gui.post.panel,...
-%     'Units',                'normalized',...
-%     'Position',             [0,0,1,1],...
-%     'Enable',               'off',...
-%     'Callback',             @(hObject,eventdata)SelectCentroids(hObject, eventdata, guidata(hObject)));
+% Data Displays
 
-gd = CreateFilename(gd,false);    % create initial filename
+for cindex = 1:numConditions
+    % second axes
+    gd.gui.data(cindex).axesImg = axes(...
+        'Parent',               gd.gui.data(cindex).panel,...
+        'Units',                'normalized',...
+        'UserData',             cindex,...
+        'Position',             [0,.2,.5,.8]);
+    axis off
+    % select frame slider
+    gd.gui.data(cindex).slider = uicontrol(...
+        'Style',                'slider',...
+        'Parent',               gd.gui.data(cindex).panel,...
+        'Units',                'normalized',...
+        'Position',             [.1,.1,.4,.1],...
+        'UserData',             cindex,...
+        'Enable',               'off',...
+        'Callback',             @(hObject,eventdata)ChangeImage(hObject, eventdata, guidata(hObject)));
+    gd.gui.data(cindex).sliderText = uicontrol(...
+        'Style',                'text',...
+        'String',               '',...
+        'Parent',               gd.gui.data(cindex).panel,...
+        'Units',                'normalized',...
+        'UserData',             cindex,...
+        'Enable',               'off',...
+        'Position',             [0,.1,.09,.1]);
+    % set first button
+    gd.gui.data(cindex).first = uicontrol(...
+        'Style',                'pushbutton',...
+        'String',               'First',...
+        'Parent',               gd.gui.data(cindex).panel,...
+        'Units',                'normalized',...
+        'Position',             [0,0,.25,.1],...
+        'UserData',             {cindex,'first',[]},...
+        'Enable',               'off',...
+        'Callback',             @(hObject,eventdata)SetMean(hObject, eventdata, guidata(hObject)));
+    % button to set last
+    gd.gui.data(cindex).last = uicontrol(...
+        'Style',                'pushbutton',...
+        'String',               'Last',...
+        'Parent',               gd.gui.data(cindex).panel,...
+        'Units',                'normalized',...
+        'Position',             [.25,0,.25,.1],...
+        'UserData',             {cindex,'last',[]},...
+        'Enable',               'off',...
+        'Callback',             @(hObject,eventdata)SetMean(hObject, eventdata, guidata(hObject)));
+    % mean axes
+    gd.gui.data(cindex).axesMean = axes(...
+        'Parent',               gd.gui.data(cindex).panel,...
+        'Units',                'normalized',...
+        'UserData',             cindex,...
+        'Position',             [.5,0,.5,1]);
+    axis off
+end
+
 try
-    initCamera(gd);         % initialize camera
+    gd = initCamera(gd);         % initialize camera
+    CreateFilename(gd,false);    % create initial filename
     set(gd.gui.fig,'Visible','on')
 catch
+    CreateFilename(gd,false);    % create initial filename
     set(gd.gui.fig,'Visible','on')
-    error('Camera not found -> try restarting MATLAB');
+    error('Camera not found -> try restarting MATLAB  (figure visible only for testing)');
 end
 end
 
@@ -478,18 +539,37 @@ gd.Internal.save.basename = fullfile(gd.Internal.save.path, get(gd.gui.file.base
 gd.Internal.save.filename = strcat(gd.Internal.save.basename, '_', get(gd.gui.file.index,'String'));
 set(gd.gui.file.filename,'String',gd.Internal.save.filename);
 
-% Reset base
-if reset
-    set([gd.gui.control.capture,gd.gui.control.selectROI],'BackgroundColor',[1,0,0]);
-    set(gd.gui.control.selectROI,'UserData',[]);
-    set(gd.gui.control.ROItoggle,'Enable','off');
+% Determine if green image exists
+if ~isempty(dir([gd.Internal.save.basename,'*']))
+    gd.Experiment.GreenImage = imread([gd.Internal.save.basename,'_green_image.tif']);
+    set(gd.gui.control.capture,'BackgroundColor',[.94,.94,.94]);
+    set(gd.gui.experiment.run,'Enable','on','BackgroundColor',[0,1,0]);
+    axes(gd.gui.control.axes);
+    imagesc(gd.Experiment.GreenImage); % display green image
+    if ~isempty(gd.Internal.ROI.pos)
+        gd=placeROI(gd);
+    end
+    axis off; colormap gray;
+    set(gd.gui.control.ROI,'Enable','on');
+else
+    set(gd.gui.control.capture,'BackgroundColor',[0,1,0]);
+    set(gd.gui.experiment.run,'Enable','off','BackgroundColor',[.94,.94,.94]);
     gd.Experiment.GreenImage = [];
+    axes(gd.gui.control.axes);
+    imagesc(zeros(gd.Internal.imaging.dim)); % display green image
+    axis off; colormap gray;
+end
+
+if reset
+    set(gd.gui.control.ROI,'Value',false,'String','Select ROI');
+    gd.Internal.ROI.handle = [];
+    gd.Internal.ROI.pos = [];
 end
 
 guidata(gd.gui.fig, gd);
 
 % Check if file exists
-if exist([gd.Internal.save.filename,'.mat'], 'file')
+if ~isempty(dir([gd.Internal.save.filename,'*']))
     set(gd.gui.file.filename,'BackgroundColor',[1,0,0]);
 else
     set(gd.gui.file.filename,'BackgroundColor',[.94,.94,.94]);
@@ -497,7 +577,7 @@ end
 end
 
 %% Prep
-function initCamera(gd)
+function gd = initCamera(gd)
 
 % Initialize camera
 gd.Internal.imaging.vid = videoinput('dalsa', 1, gd.Internal.imaging.initFile);
@@ -530,32 +610,51 @@ if sem_check == 0;
 elseif sec_check == 0;
     error('iOS:camExpControl','Could not set camera exposure control to disabled')
 end
-
-guidata(gd.gui.fig, gd);
 end
 
 function PreviewImage(hObject, eventdata, gd)
-if get(hObject,'Value')
+if get(hObject,'Value') % start preview
+    % Update GUI
     set(gd.gui.experiment.panel,'Visible','off');
-    set([gd.gui.control.capture,gd.gui.control.selectROI,gd.gui.control.histogram],'Enable','off');
+    set(gd.gui.control.capture,'Enable','off');
     set(hObject,'String','Stop Preview','BackgroundColor',[0,0,0],'ForegroundColor',[1,1,1]);
-    temp_img = zeros(gd.Internal.imaging.vid.Videoresolution);  %initialize image
-    hImage = image(temp_img,'Parent',gd.gui.axes.first);        %initialize handle
-    if get(gd.gui.control.histogram,'Value')                           %check if need to show live histogram
-        setappdata(hImage,'UpdatePreviewWindowFcn',@iOS_update_livehistogram_display);
-    end
-    preview(gd.Internal.imaging.vid,hImage)                                 %start preview
-else
+    
+    % Display stream
+    temp_img = zeros(gd.Internal.imaging.vid.Videoresolution);  % initialize image
+    hImage = image(temp_img,'Parent',gd.gui.control.axes);      % initialize handle
+    pos = get(gd.gui.fig,'Position');
+    figure('Units','normalized','Position',[pos(1)+.21,pos(2),.3,.3]);
+    h = axes; 
+    set(gd.Internal.imaging.vid,'UserData',h);                  % set histogram axis
+    setappdata(hImage,'UpdatePreviewWindowFcn',@iOS_update_livehistogram_display);
+    preview(gd.Internal.imaging.vid,hImage); % start preview
+    
+else % stop preview
     set(hObject,'String','Stopping...'); drawnow;
-    stoppreview(gd.Internal.imaging.vid);                                    %stop preview
+    stoppreview(gd.Internal.imaging.vid); % stop preview
+    h = get(gd.Internal.imaging.vid,'UserData');
+    if ishghandle(h)
+        delete(get(h,'Parent')); % delete histogram figure
+    end
+    axes(gd.gui.control.axes);
+    if ~isempty(gd.Experiment.GreenImage)
+        imagesc(gd.Experiment.GreenImage); %display subsampled image (so ROI has right dimensions)
+    else
+        imagesc(zeros(gd.Internal.imaging.dim));
+    end
+    axis off;
+    if ~isempty(gd.Internal.ROI.pos)
+        placeROI(gd);
+    end
     set(gd.gui.experiment.panel,'Visible','on');
-    set([gd.gui.control.capture,gd.gui.control.selectROI,gd.gui.control.histogram],'Enable','on');
+    set(gd.gui.control.capture,'Enable','on');
     set(hObject,'String','Preview','BackgroundColor',[.94,.94,.94],'ForegroundColor',[0,0,0]);
 end
 end
 
 function iOS_update_livehistogram_display(obj,event,hImage)
 set(hImage,'CData',event.Data);
+axes(get(gcbo,'UserData'));
 counts = imhist(event.Data);
 imhist(event.Data)
 % ylim([0 255^2])
@@ -573,16 +672,26 @@ end
 
 function CaptureImage(hObject, eventdata, gd)
 set(hObject,'String','Capturing...'); drawnow;
+axes(gd.gui.control.axes);
 img = captureSingleFrame(gd);
-gd.Experiment.GreenImage = img;
-guidata(hObject,gd);
-imwrite(img,strcat(gd.Internal.save.basename,'_','green_image.tif')); %save to file (overwrites any previous image)
-set(hObject,'String','Capture Image','BackgroundColor',[0,1,0]);
+gd.Experiment.GreenImage = img(1:gd.Internal.imaging.subsampleFactor:end,1:gd.Internal.imaging.subsampleFactor:end);
+axes(gd.gui.control.axes);
+imagesc(gd.Experiment.GreenImage); % display subsampled image (so ROI has right dimensions)
+axis off;
+if ~isempty(gd.Internal.ROI.pos)
+    placeROI(gd);
+else
+    guidata(hObject,gd);
+end
+imwrite(gd.Experiment.GreenImage,strcat(gd.Internal.save.basename,'_','green_image.tif')); %save to file (overwrites any previous image)
+set(hObject,'String','Capture Image','BackgroundColor',[.94,.94,.94]);
+set(gd.gui.control.ROI,'Enable','on');
+set(gd.gui.experiment.run,'Enable','on','BackgroundColor',[0,1,0]);
 end
 
 function img = captureSingleFrame(gd)
 temp_img = zeros(get(gd.Internal.imaging.vid,'Videoresolution'));   %initialize image
-hImage = image(temp_img,'Parent',gd.gui.axes.first);    %initialize handle
+hImage = image(temp_img,'Parent',gd.gui.control.axes);  %initialize handle
 flushdata(gd.Internal.imaging.vid)                      %remove any previous data
 triggerconfig(gd.Internal.imaging.vid, 'manual');       %change trigger
 preview(gd.Internal.imaging.vid,hImage);                %preview image
@@ -597,24 +706,66 @@ vid_data = getdata(gd.Internal.imaging.vid);            %collect recorded frame
 img = uint8(single(vid_data)/(2^12-1)*(2^8-1));    %convert frame to uint8
 end
 
+
 function SelectROI(hObject, eventdata, gd)
-if ~gd.Internal.isRunning
-    img = captureSingleFrame(gd);
-elseif ~isempty(gd.Experiment.GreenImage)
-    img = gd.Experiment.GreenImage;
+if get(hObject,'Value')
+    placeROI(gd);
+    set(hObject,'String','Delete ROI');
 else
-    error('Experiment is running and no green image is saved!');
+    delete(gd.Internal.ROI.handle);
+    gd.Internal.ROI.handle = [];
+    gd.Internal.ROI.pos = [];
+    guidata(hObject,gd);
+    if ~isempty(gd.Experiment.Trial)
+        if get(gd.gui.experiment.link,'Value')
+            UpdatePlots(1,gd);
+        else
+            for cindex = 1:gd.Experiment.numStim
+                UpdatePlots(cindex,gd);
+            end
+        end
+    end
+    set(hObject,'String','Select ROI');
 end
-img = double(img);
-img = (img-min(img(:)))/range(img(:));
-h = figure;
-BW = roipoly(img);
-% BW = roipoly(single(img)./(2^12-1));
-close(h);
-BW = BW(1:2:end,1:2:end);
-set(hObject,'UserData',BW,'BackgroundColor',[0,1,0]); % save ROI to UserData
-set(gd.gui.control.ROItoggle,'Enable','on');
 end
+
+function gd = placeROI(gd)
+fcn = makeConstrainToRectFcn('impoly',get(gd.gui.control.axes,'XLim'),get(gd.gui.control.axes,'YLim'));
+if isempty(gd.Internal.ROI.pos)
+    gd.Internal.ROI.handle = impoly(gd.gui.control.axes,'Closed',1,'PositionConstraintFcn',fcn);
+else
+    gd.Internal.ROI.handle = impoly(gd.gui.control.axes,gd.Internal.ROI.pos,'Closed',1,'PositionConstraintFcn',fcn);
+end
+addNewPositionCallback(gd.Internal.ROI.handle,@MoveROI);
+gd.Internal.ROI.pos = getPosition(gd.Internal.ROI.handle);
+guidata(gd.gui.fig,gd);
+if ~isempty(gd.Experiment.Trial)
+    if get(gd.gui.experiment.link,'Value')
+        UpdatePlots(1,gd);
+    else
+        for cindex = 1:gd.Experiment.numStim
+            UpdatePlots(cindex,gd);
+        end
+    end
+end
+end
+
+function MoveROI(pos)
+h = get(gco,'Parent');
+gd = guidata(h);
+gd.Internal.ROI.pos = pos;
+guidata(h,gd);
+if ~isempty(gd.Experiment.Trial)
+    if get(gd.gui.experiment.link,'Value')
+        UpdatePlots(1,gd);
+    else
+        for cindex = 1:gd.Experiment.numStim
+            UpdatePlots(cindex,gd);
+        end
+    end
+end
+end
+
 
 %% Stimuli
 function ChangeStim(hObject, eventdata, gd)
@@ -652,7 +803,11 @@ if get(hObject,'Value')
     Fs = gd.Internal.daq.samplingFrequency;
     Triggers = generateTriggers(gd);
     if isempty(gd.Internal.viewHandle) || ~ishghandle(gd.Internal.viewHandle) % figure doesn't exist
-        gd.Internal.viewHandle = figure('NumberTitle','off','Name','Single Trial Triggers');
+        pos = get(gd.gui.fig,'OuterPosition');
+        pos2 = get(gd.gui.stim.panel,'Position');
+        pos = [pos(1),.1,pos(3),pos(2)+pos(4)*pos2(2)-.11];
+        gd.Internal.viewHandle = figure('NumberTitle','off','Name','Single Trial Triggers',...
+            'Units','normalized','OuterPosition',pos);
         guidata(hObject,gd);
     else
         figure(gd.Internal.viewHandle);
@@ -798,10 +953,16 @@ if get(hObject,'Value')
     end
     
     %% Update GUI
-    set([gd.gui.experiment.abort,gd.gui.experiment.restart],'Enable','on');
+    set(hObject,'String','Stop','BackgroundColor',[0,1,0]);
+    gd.Experiment.numStim = nnz(ActivePiezos);
+    set(gd.gui.experiment.save,'BackgroundColor',[.94,.94,.94]);
+    set([gd.gui.control.preview,gd.gui.control.capture,gd.gui.experiment.save],'Enable','off');
+    set(gd.gui.experiment.restart,'Enable','on');
+    if gd.Experiment.numStim>1
+        set(gd.gui.experiment.link,'Enable','on');
+    end
     gd.Internal.isRunning = true;
     guidata(hObject,gd);
-    numConditions = nnz(ActivePiezos);
     
     %% Initialize DAQ
     Fs = gd.Internal.daq.samplingFrequency;
@@ -821,135 +982,324 @@ if get(hObject,'Value')
     %% Create Triggers
     
     % Initialize Experiment struct
-    Experiment = gd.Experiment;
-    Experiment.filename = gd.Internal.save.filename;    % record file saved to
-    Experiment.timing.init = datestr(now);              % record date & time information
+    gd.Experiment.filename = gd.Internal.save.filename;    % record file saved to
+    gd.Experiment.timing.init = datestr(now);              % record date & time information
     
     % Create triggers
     Triggers = generateTriggers(gd);
-    numFrames = sum(Triggers(:,2)==1);
-    numBaselineFrames = sum(Triggers(1:round(Experiment.timing.baselineDur*Fs),2));
+    totalFrames = sum(Triggers(:,2)==1);
     frameTime = find(Triggers(:,2)==1)/Fs;
-    % frameTime(1:numBaselineFrames) = []; % remove baseline frames if they're not being saved
+    badFrames = frameTime < .150; % camera doesn't expose fully until after ~150ms
+    numBadFrames = nnz(badFrames);
+    numFrames = floor((totalFrames-numBadFrames)/gd.Experiment.imaging.numFrames2Avg);
+    lastFrameIndex = totalFrames - rem(totalFrames-numBadFrames,gd.Experiment.imaging.numFrames2Avg);
+    
+    % Determine frames to average over for baseline and stim
+
+    firstFrame = frameTime(numBadFrames+1:gd.Experiment.imaging.numFrames2Avg:end);
+    lastFrame = frameTime(numBadFrames+gd.Experiment.imaging.numFrames2Avg:gd.Experiment.imaging.numFrames2Avg:end);
+    numBaselineFrames = nnz(lastFrame<=gd.Experiment.timing.baselineDur);
+    first = repmat(find(firstFrame>=str2num(get(gd.gui.timing.avgFirst,'String')),1),1,gd.Experiment.numStim);
+    last = repmat(find(lastFrame<=str2num(get(gd.gui.timing.avgLast,'String')),1,'last'),1,gd.Experiment.numStim);
+    clear frameTime firstFrame lastFrame % save space in memory
+    
+    %% Initialize output and displays
+    gd.Experiment.Trial = zeros(gd.Internal.imaging.dim(1),gd.Internal.imaging.dim(2),numFrames,gd.Experiment.numStim,'double');
+    guidata(hObject,gd); % in case sliders are played with before first trial collected
+    
+    % Set values and update plots
+    set([gd.gui.data(:).sliderText,gd.gui.data(:).slider],'Enable','on');
+    for cindex = 1:gd.Experiment.numStim
+        
+        % Set slider values
+        set(gd.gui.data(cindex).slider,'Min',1,'Max',numFrames,...
+            'SliderStep',[1/(numFrames-1),min(10/(numFrames-1),numFrames)],...
+            'Value',round(numFrames/2));
+        set(gd.gui.data(cindex).first,'String',sprintf('First = %d',first(cindex)),...
+            'UserData',{cindex,'first',first(cindex)});
+        set(gd.gui.data(cindex).last,'String',sprintf('Last = %d',last(cindex)),...
+            'UserData',{cindex,'last',last(cindex)});
+        
+        % Display images
+        UpdatePlots(cindex,gd);
+    end
+    
+    % Enable sliders and frame selections
+    if get(gd.gui.experiment.link,'Value') % enable first condition
+        set([gd.gui.data(2:end).slider],'Enable','off');
+        set([gd.gui.data(1).first,gd.gui.data(1).last],'Enable','on');
+    else % enable everything
+        set([gd.gui.data(:).first,gd.gui.data(:).last],'Enable','on');
+    end
+
     
     %% Run Experiment
-
-    % Update gui
-    set(hObject,'String','Stop & Save');
     
-    % Initialize display
-    dim = gd.Internal.imaging.vid.Videoresolution;
-    axes(gd.gui.axes.second); image(zeros(dim)); axis off;
-    axes(gd.gui.axes.third); image(zeros(dim)); axis off;
-    
-    delta = zeros(dim(1)/2,dim(2)/2,numConditions,numFrames, 'double'); % numFrames-numBaselineFrames
     tindex = 1;
-    while tindex < str2double(get(gd.gui.experiment.numTrials,'String')) && get(hObject,'Value') && ~get(gd.gui.experiment.abort,'Value')
-        for cindex = 1:numConditions
+    while tindex < str2double(get(gd.gui.experiment.numTrials,'String')) && get(hObject,'Value')
+        cindex = 1;
+        while cindex <= gd.Experiment.numStim && get(hObject,'Value')
             fprintf('Sending triggers for trial %d, condition %d...\n',tindex,cindex);
             
-            % Initialize camera
-            flushdata(gd.Internal.imaging.vid);
-            % preview(gd.Internal.imaging.vid,hImage);
-            start(gd.Internal.imaging.vid);
-            
-            % Run trial
-            currentTriggers = [repmat(Triggers(:,1),1,nnz(ActivePiezos)),Triggers(:,2)];
-            currentTriggers(:,setdiff(1:numConditions,cindex)) = 0;
-            DAQ.queueOutputData(currentTriggers);
-            DAQ.startForeground;
-            
-            % Stop camera & gather frames
-            % stoppreview(gd.Internal.imaging.vid);
-            stop(gd.Internal.imaging.vid);
-            time = tic;
-            vid_data = getdata(gd.Internal.imaging.vid,gd.Internal.imaging.vid.FramesAvailable);
-            vid_data = vid_data(1:2:end,1:2:end,1,:);
-            vid_data = double(vid_data);
-            
-            % Analyze frames
-            baseline = mean(vid_data(:,:,1,1:numBaselineFrames),4);
-            if tindex == 1
-                delta(:,:,cindex,:) = bsxfun(@rdivide,bsxfun(@minus,vid_data(:,:,1,:),baseline),baseline);
-            elseif tindex <= 10
-                delta(:,:,cindex,:) = (tindex-1)/tindex*delta(:,:,cindex,:) + 1/tindex*bsxfun(@rdivide,bsxfun(@minus,vid_data(:,:,1,:),baseline),baseline); %numBaselineFrames+1:end
-            else
-                delta(:,:,cindex,:) = .9*delta(:,:,cindex,:) + .1*bsxfun(@rdivide,bsxfun(@minus,vid_data(:,:,1,:),baseline),baseline);
-            end
-            first = find(frameTime>=str2num(get(gd.gui.experiment.avgFirst,'String')),1);
-            last = find(frameTime<=str2num(get(gd.gui.experiment.avgLast,'String')),1,'last');
-            Mean = mean(delta(:,:,cindex,first:last),4); % mean across trials, then across frames
-            
-            % Display updated images
-            axes(gd.gui.axes.second);
-            imagesc(Mean); axis off;
-            if get(gd.gui.control.ROItoggle,'Value')
-                axes(gd.gui.axes.third);
-                Mean(~get(gd.gui.control.selectROI,'UserData')) = -inf;
-                imagesc(Mean); axis off;
+            try
+                % Initialize camera
+                flushdata(gd.Internal.imaging.vid);
+                % preview(gd.Internal.imaging.vid,hImage);
+                try
+                    start(gd.Internal.imaging.vid);
+                catch % errored in previous session
+                    stop(gd.Internal.imaging.vid);
+                    flushdata(gd.Internal.imaging.vid);
+                    start(gd.Internal.imaging.vid);
+                end
+                
+                % Run trial
+                currentTriggers = [repmat(Triggers(:,1),1,nnz(ActivePiezos)),Triggers(:,2)];
+                currentTriggers(:,setdiff(1:gd.Experiment.numStim,cindex)) = 0;
+                DAQ.queueOutputData(currentTriggers);
+                DAQ.startBackground;
+                while DAQ.IsRunning
+                    pause(.2); % frees up command line for online analysis
+                end
+                time = tic;
+                
+                % Stop camera & gather frames
+                % stoppreview(gd.Internal.imaging.vid);
+                stop(gd.Internal.imaging.vid);
+                vid_data = getdata(gd.Internal.imaging.vid,gd.Internal.imaging.vid.FramesAvailable);
+                vid_data = squeeze(vid_data(1:gd.Internal.imaging.subsampleFactor:end,1:gd.Internal.imaging.subsampleFactor:end,1,numBadFrames+1:lastFrameIndex));
+                vid_data = double(vid_data);
+                vid_data = reshape(vid_data,gd.Internal.imaging.dim(1),gd.Internal.imaging.dim(2),gd.Experiment.imaging.numFrames2Avg,numFrames);
+                vid_data = squeeze(mean(vid_data,3));
+                
+                % Analyze frames
+
+                baseline = mean(vid_data(:,:,1:numBaselineFrames),3); % compute baseline
+                vid_data = bsxfun(@rdivide,bsxfun(@minus,vid_data,baseline),baseline); % compute dI/I
+                % vid_data = bsxfun(@minus, vid_data, permute(median(reshape(vid_data,prod(gd.Internal.imaging.dim),numFrames),1),[1,3,2])); % subtract off frame by frame median
+                % vid_data = bsxfun(@minus, vid_data, permute(min(reshape(vid_data,prod(gd.Internal.imaging.dim),numFrames),[],1),[1,3,2]))+1; % rectify so minimal value is 1
+                
+                if tindex ~= 1
+                    gd = guidata(hObject); % refresh ROI
+                end
+                if tindex == 1
+                    gd.Experiment.Trial(:,:,:,cindex) = vid_data;
+                else %if tindex < 10
+                    gd.Experiment.Trial(:,:,:,cindex) = (tindex-1)/tindex*gd.Experiment.Trial(:,:,:,cindex) + 1/tindex*vid_data;
+%                 else
+%                     gd.Experiment.Trial(:,:,:,cindex) = .9*gd.Experiment.Trial(:,:,:,cindex) + .1*vid_data;
+                end
+                guidata(hObject,gd);
+                
+                % Update display
+                UpdatePlots(cindex,gd);
+                
+                % Pause rest of ITI
+                pause(toc(time)-gd.Experiment.timing.ITI);
+                
+                cindex = cindex + 1;
+            catch
+                fprintf('Last trial failed... trying again\n');
             end
             
             % Check if need to restart
             if get(gd.gui.experiment.restart,'Value')
                 fprintf('User Restarted\n');
                 tindex = 1;
+                cindex = 1;
                 set(gd.gui.experiment.restart,'Value',false);
             end
             
-            % Check if need to abort
-            if get(gd.gui.experiment.abort,'Value')
-                break
-            end
-            
-            pause(toc(time)-Experiment.timing.ITI); % pause rest of ITI
         end %condition
-        tindex = tindex + 1;
+        tindex = tindex + 1;     
     end %trials
-    if size(delta,5) >= tindex
-        delta(:,:,:,:,tindex:end) = [];
-    end
     
-    % Save results
-    if ~get(gd.gui.experiment.abort,'Value')
-        
-        % Save outputs to struct
-        Experiment.timing.numTrials = tindex-1;
-        Experiment.timing.avgFirst = find(frameTime>=str2num(get(gd.gui.experiment.avgFirst,'String')),1);
-        Experiment.timing.avgLast = find(frameTime<=str2num(get(gd.gui.experiment.avgLast,'String')),1,'Last');
-        Experiment.ROI = get(gd.gui.control.selectROI,'UserData');
-        Experiment.Trial = delta;
-        Experiment.Mean = mean(Experiment.Trial(:,:,:,Experiment.timing.avgFirst:Experiment.timing.avgLast),4);
-        
-        % Save outputs to files
-        fprintf('Saving %d trials to file...',Experiment.timing.numTrials);
-        save([Experiment.filename,'.mat'],'Experiment');
-        for cindex = 1:numConditions
-            imwrite(Experiment.Mean(:,:,cindex),[Experiment.filename,'_cond',num2str(cindex),'.tif']);
-        end
-        fprintf('\tComplete\n');
-        
-        % Select Centroids
-        UIcentroid([Experiment.filename,'.mat'],[],'Save',[Experiment.filename,'_centroids.tif']);
-        
-        % Update GUI
-        set(gd.gui.file.index,'String',num2str(str2num(get(gd.gui.file.index,'String'))+1)); % update index
-        CreateFilename(gd,false); % update filename
-        
-    else % user aborted
-        fprintf('User Aborted\n');
-        set(gd.gui.experiment.abort,'Value',false);
-        set(hObject,'Value',false);
-    end
+    % Record # of trials actually presented & update status
+    gd.Experiment.timing.numTrials = tindex-1;
+    gd.Internal.isRunning = false;
+    guidata(hObject,gd);
     
     % Update GUI
-    gd.Internal.isRunning = false;
-    set([gd.gui.experiment.abort,gd.gui.experiment.restart],'Enable','off'); % in case of abort
-    guidata(hObject,gd);
-    set(hObject,'String','Run');
+    set(hObject,'Value',false); % in case max # of trials reached    
+    set([gd.gui.control.preview,gd.gui.control.capture],'Enable','on');
+    set(gd.gui.experiment.restart,'Enable','off');
+    set(gd.gui.experiment.save,'Enable','on','BackgroundColor',[0,1,0]);
+    set(hObject,'String','Run','BackgroundColor',[.94,.94,.94]);
     
 else
-    set(hObject,'String','Stopping...');
-    set([gd.gui.experiment.abort,gd.gui.experiment.restart],'Enable','off');
+    set(hObject,'String','Stopping...','BackgroundColor',[.94,.94,.94]);
+    set(gd.gui.experiment.restart,'Enable','off');
 end
 end
 
+
+function Link(hObject, eventdata, gd)
+if get(hObject,'Value') % link axes
+    set(gd.gui.data(2:end).slider,'Enable','off');
+    set([gd.gui.data(2:end).first,gd.gui.data(2:end).last],'Enable','off');
+else % unlink axes
+    set(gd.gui.data(2:end).slider,'Enable','on');
+    set([gd.gui.data(2:end).first,gd.gui.data(2:end).last],'Enable','on');
+end
+for cindex = 2:gd.Experiment.numStim
+    UpdatePlots(cindex,gd);
+end
+end
+
+
+function UpdatePlots(cindex, gd)
+ChangeImage(gd.gui.data(cindex).slider, [], gd); % change one or all selection axes
+if ~get(gd.gui.experiment.link,'Value')
+    UpdateMean(cindex,gd); % change current mean axis
+else
+    for index = 1:gd.Experiment.numStim % change all mean axes
+        UpdateMean(index,gd);
+    end
+end
+end
+
+function ChangeImage(hObject, eventdata, gd)
+cindex = get(hObject,'UserData');
+if cindex==1 || ~get(gd.gui.experiment.link,'Value')
+    val = round(get(hObject,'Value'));
+    rindex = cindex;
+else
+    val = round(get(gd.gui.data(1).slider,'Value'));
+    set(gd.gui.data(cindex).slider,'Value',val);
+    rindex = 1;
+end
+set(gd.gui.data(cindex).sliderText,'String',val);
+img = gd.Experiment.Trial(:,:,val,cindex);
+axes(gd.gui.data(cindex).axesImg);
+if isempty(gd.Internal.ROI.pos)
+    imagesc(img);
+    axis off;
+else
+    temp = createMask(gd.Internal.ROI.handle);
+    CLim = [min(min(img(temp))),max(max(img(temp)))];
+    if any(CLim)
+        imagesc(img,CLim);
+    else
+        imagesc(img);
+    end
+    axis off;
+    hold on;
+    plot(gd.Internal.ROI.pos([1:end,1],1),gd.Internal.ROI.pos([1:end,1],2),'r-','LineWidth',2);
+    hold off;
+end
+
+if cindex==1 && get(gd.gui.experiment.link,'Value')
+    for index = 2:gd.Experiment.numStim
+        ChangeImage(gd.gui.data(index).slider,[],gd);
+    end
+end
+end
+
+function SetMean(hObject, eventdata, gd)
+temp = get(hObject,'UserData');
+cindex = temp{1};
+val = round(get(gd.gui.data(cindex).slider,'Value'));
+switch temp{2}
+    case 'first'
+        set(hObject,'String',sprintf('First = %d',val),'UserData',{cindex,'first',val});
+    case 'last'
+        set(hObject,'String',sprintf('Last = %d',val),'UserData',{cindex,'last',val});
+end
+if ~get(gd.gui.experiment.link,'Value')
+    UpdateMean(cindex,gd);
+else
+    for index = 1:gd.Experiment.numStim
+        UpdateMean(index,gd);
+    end
+end
+end
+
+function UpdateMean(cindex, gd)
+if ~get(gd.gui.experiment.link,'Value')
+    index = cindex;
+else
+    index = 1;
+end
+f = get(gd.gui.data(index).first,'UserData');
+l = get(gd.gui.data(index).last,'UserData');
+Mean = mean(gd.Experiment.Trial(:,:,f{3}:l{3},cindex),3);
+axes(gd.gui.data(cindex).axesMean);
+if isempty(gd.Internal.ROI.pos)
+    imagesc(Mean);
+    axis off;
+else
+    temp = createMask(gd.Internal.ROI.handle);
+    CLim = [min(min(Mean(temp))),max(max(Mean(temp)))];
+    if any(CLim)
+        imagesc(Mean,CLim);
+    else
+        imagesc(Mean);
+    end
+    axis off;
+    hold on;
+    plot(gd.Internal.ROI.pos([1:end,1],1),gd.Internal.ROI.pos([1:end,1],2),'r-','LineWidth',2);
+    hold off;
+end
+end
+
+
+function Save(hObject, eventdata, gd)
+set(hObject,'String','Saving...','BackgroundColor',[1,0,0],'Enable','off');
+
+% Collect analyses
+Experiment = gd.Experiment;
+if isempty(gd.Internal.ROI.pos)
+    Experiment.ROI = [];
+else
+    Experiment.ROI = createMask(gd.Internal.ROI.handle);
+end
+Mean = nan(gd.Internal.imaging.dim(1),gd.Internal.imaging.dim(2),Experiment.numStim);
+for cindex = 1:Experiment.numStim
+    if get(gd.gui.experiment.link,'Value')
+        index = 1;
+    else
+        index = cindex;
+    end
+    temp = get(gd.gui.data(index).first,'UserData');
+    Experiment.timing.avgFirst(cindex) = temp{3};
+    temp = get(gd.gui.data(index).last,'UserData');
+    Experiment.timing.avgLast(cindex) = temp{3};
+    Mean(:,:,cindex) = mean(Experiment.Trial(:,:,Experiment.timing.avgFirst(cindex):Experiment.timing.avgLast(cindex),cindex),3);
+end
+Experiment.Trial = []; % saving is much faster
+
+% Determine CLim
+CLim = nan(Experiment.numStim,2);
+for cindex = 1:Experiment.numStim
+    temp = Mean(:,:,cindex);
+    if ~isempty(Experiment.ROI)
+        CLim(cindex,:) = [min(temp(Experiment.ROI)),max(temp(Experiment.ROI))];
+    else
+        CLim(cindex,:) = [min(temp(:)),max(temp(:))];
+    end
+end
+
+% Save outputs to files
+fprintf('Saving %d trials to file...',Experiment.timing.numTrials);
+save([Experiment.filename,'.mat'],'Experiment','Mean','-v7.3');
+for cindex = 1:gd.Experiment.numStim
+    figure('Name',sprintf('Stimulus %d final',cindex));
+    imagesc(Mean(:,:,cindex),CLim(cindex,:)); colormap gray; axis off;
+    Image = getframe(gca);
+    Image = Image.cdata;
+    imwrite(Image,[Experiment.filename,'_cond',num2str(cindex),'.tif']); % needs to have CLim
+end
+fprintf('\tComplete\n');
+        
+% Select Centroids
+loc = UIcentroid(Mean,Experiment.GreenImage,...
+    'ROI',Experiment.ROI,...
+    'Save',[Experiment.filename,'_centroids.tif']);
+save([Experiment.filename,'.mat'],'loc','-append');
+
+% Update GUI
+set(gd.gui.file.index,'String',num2str(str2num(get(gd.gui.file.index,'String'))+1)); % update index
+CreateFilename(gd,false); % update filename
+
+set(hObject,'String','Save & Mark','BackgroundColor',[.94,.94,.94],'Enable','on');
+end
