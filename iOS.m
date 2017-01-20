@@ -616,7 +616,7 @@ function PreviewImage(hObject, eventdata, gd)
 if get(hObject,'Value') % start preview
     % Update GUI
     set(gd.gui.experiment.panel,'Visible','off');
-    set(gd.gui.control.capture,'Enable','off');
+    set([gd.gui.control.capture,gd.gui.control.ROI],'Enable','off');
     set(hObject,'String','Stop Preview','BackgroundColor',[0,0,0],'ForegroundColor',[1,1,1]);
     
     % Display stream
@@ -647,7 +647,7 @@ else % stop preview
         placeROI(gd);
     end
     set(gd.gui.experiment.panel,'Visible','on');
-    set(gd.gui.control.capture,'Enable','on');
+    set([gd.gui.control.capture,gd.gui.control.ROI],'Enable','on');
     set(hObject,'String','Preview','BackgroundColor',[.94,.94,.94],'ForegroundColor',[0,0,0]);
 end
 end
@@ -1095,7 +1095,7 @@ if get(hObject,'Value')
                 UpdatePlots(cindex,gd);
                 
                 % Pause rest of ITI
-                pause(toc(time)-gd.Experiment.timing.ITI);
+                pause(gd.Experiment.timing.ITI-toc(time));
                 
                 cindex = cindex + 1;
             catch
