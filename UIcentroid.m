@@ -41,6 +41,12 @@ if ischar(Mean)
 elseif isstruct(Mean)
     Experiment = Mean;
     Mean = Experiment.Mean;
+elseif iscellstr(Mean)
+    temp = imread(Mean{1});
+    for findex = 1:numel(Mean)
+        temp(:,:,findex) = imread(Mean{findex});
+    end
+    Mean = temp;
 end
 
 if ~exist('GreenImage','var') || isempty(GreenImage)
@@ -53,7 +59,8 @@ if ~exist('GreenImage','var') || isempty(GreenImage)
         end
         GreenImage = fullfile(p,GreenImage);
     end
-elseif ischar(GreenImage)
+end
+if ischar(GreenImage)
     GreenImage = imread(GreenImage);
 end
 
@@ -79,13 +86,16 @@ end
 
 %% Select Centroids
 loc = nan(numConditions,2);
-hF = figure('Name','Select Centroid','NumberTitle','off');
+hF = figure('NumberTitle','off');
 for cindex = 1:numConditions
+    hF.Name = sprintf('Select Centroid: condition %d',cindex);
     imagesc(Mean(:,:,cindex),CLim(cindex,:)); % display image
     axis off; colormap gray;
-    hold on; 
-    plot(pos{1}([1:end,1],2),pos{1}([1:end,1],1),'r-');
-    hold off;
+    if ~isempty(ROI)
+        hold on;
+        plot(pos{1}([1:end,1],2),pos{1}([1:end,1],1),'r-');
+        hold off;
+    end
     loc(cindex,:) = ginput(1); % ui select centroid
 end
 
