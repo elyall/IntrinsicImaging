@@ -1,7 +1,8 @@
 function [Model,Dict] = applyBFModel(Centroids,Labels,varargin)
-% Centroids is Nx2 matrix  with columns: [Medial-Lateral,Rostral-Caudal]
+% Centroids is Nx2 matrix  with columns: [Medial-Lateral,Rostral-Caudal],
+% where N is greater than 2.
 
-DictFile = '/home/elyall/Documents/Code/MATLAB/IntrinsicImaging/kleinfeld barrel centroids.xlsx';
+DictFile = '/home/elyall/Documents/Code/MATLAB/IntrinsicImaging/knutsen barrel centroids.xlsx';
 
 verbose = false;
 
@@ -23,7 +24,7 @@ while index<=length(varargin)
     end
 end
 
-%% Establish the model parameters
+%% Load model and dictionary
 [Model,Dict]=xlsread(DictFile);
 Model = Model(1:2,:)';
 Dict = Dict(1,2:end);
@@ -32,7 +33,7 @@ Dict = Dict(1,2:end);
 N = size(Centroids,1);
 if N ~= numel(Labels)
     error('Need one label per centroid');
-elseif N <= 2
+elseif N < 3
     error('Need at least 3 whiskers');
 elseif any(~ismember(Labels,Dict))
     error('Ensure all labels input match a whisker in the dictionary');
@@ -44,7 +45,7 @@ index = cellfun(@(x) find(strcmp(x,Dict)),Labels); % match input whiskers to rel
 tform = fitgeotrans(Model(index,:),Centroids,'similarity'); % determine transformation
 Model = transformPointsForward(tform, Model);               % apply transformation
 
-%% Display fit
+%% Display registration
 if verbose
     figure; hold on;
     plot(Centroids(:,1),Centroids(:,2),'ko');

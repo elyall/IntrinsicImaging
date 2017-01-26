@@ -231,7 +231,7 @@ gd.gui.timing.stimDurText = uicontrol(...
     'Units',                'normalized',...
     'Position',             [0,.7,.65,.1]);
 % Post stimulus duration
-gd.gui.timing.ITI = uicontrol(...
+gd.gui.timing.postDur = uicontrol(...
     'Style',                'edit',...
     'Parent',               gd.gui.timing.panel,...
     'String',               gd.Experiment.timing.postDur,...
@@ -239,7 +239,7 @@ gd.gui.timing.ITI = uicontrol(...
     'Position',             [.7,.55,.3,.15],...
     'UserData',             {'timing','postDur', 0, []},...
     'Callback',             @(hObject,eventdata)ChangeStim(hObject, eventdata, guidata(hObject)));
-gd.gui.timing.ITIText = uicontrol(...
+gd.gui.timing.postDurText = uicontrol(...
     'Style',                'text',...
     'Parent',               gd.gui.timing.panel,...
     'String',               'Post-Stim (s)',...
@@ -800,6 +800,7 @@ end
 
 function ViewTriggers(hObject, eventdata, gd)
 if get(hObject,'Value')
+    gd=refresh(gd); % update inputs
     Fs = gd.Internal.daq.samplingFrequency;
     Triggers = generateTriggers(gd);
     if isempty(gd.Internal.viewHandle) || ~ishghandle(gd.Internal.viewHandle) % figure doesn't exist
@@ -930,6 +931,12 @@ trig = repmat(single_stim,numWails,1);
 
 end
 
+function gd=refresh(gd) 
+gd.Experiment.timing.baselineDur = str2double(get(gd.gui.timing.baselineDur,'String'));
+gd.Experiment.timing.stimDur = str2double(get(gd.gui.timing.stimDur,'String'));
+gd.Experiment.timing.postDur = str2double(get(gd.gui.timing.postDur,'String'));
+gd.Experiment.timing.ITI = str2double(get(gd.gui.timing.ITI,'String'));
+end
 
 %% Experiment
 function RunExperiment(hObject, eventdata, gd)
@@ -981,11 +988,13 @@ if get(hObject,'Value')
     
     %% Create Triggers
     
+    
     % Initialize Experiment struct
     gd.Experiment.filename = gd.Internal.save.filename;    % record file saved to
     gd.Experiment.timing.init = datestr(now);              % record date & time information
     
     % Create triggers
+    gd = refresh(gd); % update inputs
     Triggers = generateTriggers(gd);
     totalFrames = sum(Triggers(:,2)==1);
     frameTime = find(Triggers(:,2)==1)/Fs;
@@ -1095,7 +1104,9 @@ if get(hObject,'Value')
                 UpdatePlots(cindex,gd);
                 
                 % Pause rest of ITI
-                pause(gd.Experiment.timing.ITI-toc(time));
+                while get(hObject,'Value') && toc(time)<gd.Experiment.timing.ITI
+                    pause(.2);
+                end
                 
                 cindex = cindex + 1;
             catch
