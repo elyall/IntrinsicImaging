@@ -1,6 +1,8 @@
 function [Image,loc] = UIcentroid(Mean,GreenImage,varargin)
 
-ROI = [];
+ROI = {[]};
+blur = [];
+blur = fspecial('gaussian',4,1);
 saveFile = '';
 savePrompt = false; % allows for default file to be input to saveFile, but still prompts for filename determination
 
@@ -11,6 +13,9 @@ while index<=length(varargin)
         switch varargin{index}
             case 'ROI'
                 ROI = varargin{index+1};
+                index = index + 2;
+            case 'filter'
+                blur = varargin{index+1};
                 index = index + 2;
             case {'Save','save','SaveFile', 'saveFile'}
                 saveFile = varargin{index+1};
@@ -48,6 +53,8 @@ elseif iscellstr(Mean)
     end
     Mean = temp;
 end
+Mean = double(Mean);
+numConditions = size(Mean,3);
 
 if ~exist('GreenImage','var') || isempty(GreenImage)
     if exist('Experiment','var')
@@ -65,18 +72,47 @@ if ischar(GreenImage)
 end
 
 
-%% Determine color limits
-numConditions = size(Mean,3);
-CLim = nan(numConditions,2);
-if ~isempty(ROI)
-    pos = bwboundaries(ROI);
+%% Filter images
+if ~isempty(blur)
     for cindex = 1:numConditions
-        temp = Mean(:,:,cindex);
-        CLim(cindex,1) = min(temp(ROI));
-        CLim(cindex,2) = max(temp(ROI));
+        Mean(:,:,cindex) = filter2(blur,Mean(:,:,cindex));
     end
-else
-    for cindex = 1:numConditions
+end
+
+
+%% Determine ROI
+if ~iscell(ROI)
+    ROI = {ROI};
+end
+if numel(ROI) == 1 && numConditions ~= 1
+    ROI = repmat(ROI,1,numConditions);
+end
+
+% UI select ROIs
+for cindex = 1:numConditions
+    if isequal(ROI{cindex},true)
+        hF = figure('NumberTitle','off','Name',sprintf('Select ROI %d',cindex));
+        imagesc(Mean(:,:,cindex)); colormap(gray);
+        fcn = makeConstrainToRectFcn('impoly',get(gca,'XLim'),get(gca,'YLim'));
+        h = impoly(gca,'Closed',1,'PositionConstraintFcn',fcn);
+        for p = 3:-1:1;
+            set(hF,'Name',sprintf('Closing in %d',p));
+            pause(1)
+        end 
+        ROI{cindex} = createMask(h); % ROI{cindex} = getPosition(h);
+        close(hF);
+    end
+end
+
+
+%% Determine color limits
+CLim = nan(numConditions,2);
+for cindex = 1:numConditions
+    if ~isempty(ROI{cindex})
+        temp = Mean(:,:,cindex);
+        CLim(cindex,1) = min(temp(ROI{cindex}));
+        CLim(cindex,2) = max(temp(ROI{cindex}));
+    else
         temp = Mean(:,:,cindex);
         CLim(cindex,1) = min(temp(:));
         CLim(cindex,2) = max(temp(:));
@@ -91,11 +127,12 @@ for cindex = 1:numConditions
     hF.Name = sprintf('Select Centroid: condition %d',cindex);
     imagesc(Mean(:,:,cindex),CLim(cindex,:)); % display image
     axis off; colormap gray;
-    if ~isempty(ROI)
-        hold on;
-        plot(pos{1}([1:end,1],2),pos{1}([1:end,1],1),'r-');
-        hold off;
-    end
+%     if ~isempty(ROI{cindex})
+%         hold on;
+%         pos = bwboundaries(ROI{cindex});
+%         plot(pos{1}([1:end,1],2),pos{1}([1:end,1],1),'r--');
+%         hold off;
+%     end
     loc(cindex,:) = ginput(1); % ui select centroid
 end
 
