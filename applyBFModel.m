@@ -1,18 +1,21 @@
 function [Model,Dict] = applyBFModel(Centroids,Labels,varargin)
 % applyBFModel Register model of barrel field to 3 or more input centroids.
-%   [MODEL,DICT] = applyBFModel(CENTROIDS,LABELS), fits model of barrel
+%   [MODEL,DICT] = applyBFModel(CENTROIDS,LABELS) fits model of barrel
 %   field to CENTROIDS, an Nx2 list of intrinsic image centroids with
 %   columns [Medial-Lateral, Rostral-Caudal] and N greater than 2. LABELS
 %   is 1xN or Nx1 cell array of strings where each cell contains the label
-%   of the corresponding centroid input.
+%   of the corresponding centroid input. MODEL is the output locations of
+%   each of the centroids with the Nth row corresponding to the Nth label
+%   in DICT.
 %
-%   [MODEL,DICT] = applyBFModel(CENTROIDS,LABELS,'verbose') will display
-%   the resulting registered model.
+%   applyBFModel(...,'Verbose') will display the resulting registered
+%   model.
 %
-%   [MODEL,DICT] = applyBFModel(CENTROIDS,LABELS,'Image',IMAGE) will
-%   display the resulting registered model overlayed on IMAGE.
+%   applyBFModel(...,'Image',IMAGE) will display the resulting registered
+%   model overlayed on IMAGE.
 %
 
+% Default parameters that can be adjusted
 ModelFile = '/home/elyall/Documents/Code/MATLAB/IntrinsicImaging/knutsen barrel centroids.xlsx'; % user-defined path to dictionary file
 
 
