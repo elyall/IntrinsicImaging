@@ -1,4 +1,4 @@
-function [Fit, zfit, fiterr, zerr, resnorm, rr] = fit2DGauss(Image,ROI,init,varargin)
+function [Fit, ROI, zfit, fiterr, zerr, resnorm, rr] = fit2DGauss(Image,ROI,init,varargin)
 % fit2DGauss Fit 2D Gaussian to intrinsic imaging data. Utilizes FMGAUSSFIT
 % (https://www.mathworks.com/matlabcentral/fileexchange/41938-fit-2d-gaussian-with-optimization-toolbox)
 %   FIT = fit2DGauss() prompts the user to select one or more tif files,
@@ -8,15 +8,15 @@ function [Fit, zfit, fiterr, zerr, resnorm, rr] = fit2DGauss(Image,ROI,init,vara
 %   Gaussian fit.
 %
 %   fit2DGauss(IMAGE), IMAGE can be an emptry matrix to prompt the user for
-%   file selection, a cell array of strings of filenames to load, or an HxWxN matrix to
-%   fit N 2D Gaussians to.
+%   file selection, a cell array of strings of filenames to load, or an
+%   HxWxN matrix to fit N 2D Gaussians to.
 %
-%   fit2DGauss(IMAGE,ROI) restricts the 2D Gaussian fit to the data within
-%   the polygon specified by ROI, a Px2 matrix of the perimeter's
-%   points. Set ROI to true to prompt for user selection of the polygon.
-%   Leave ROI as an empty matrix to not use an ROI. To specify different
-%   ROI parameters for each image, ROI can be a cell array of length equal
-%   to the number of images input.
+%   [FIT, ROI] = fit2DGauss(IMAGE,ROI) restricts the 2D Gaussian fit to the
+%   data within the polygon specified by ROI, a Px2 matrix of the
+%   perimeter's points. Set ROI to true to prompt for user selection of the
+%   polygon. Leave ROI as an empty matrix to not use an ROI. To specify
+%   different ROI parameters for each image, ROI can be a cell array of
+%   length equal to the number of images input.
 %
 %   fit2DGauss(IMAGE,ROI,INIT) specifies the initial [X,Y] guess of the
 %   Gaussian's centroid to be INIT. Set INIT to true to prompt for user

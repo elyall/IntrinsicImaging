@@ -34,8 +34,8 @@ end
 % Initialize Imaging
 gd.Internal.imaging.port = 'COM5';
 gd.Internal.imaging.initFile = 'C:\Users\User\Documents\MATLAB\iOS\CamFiles\T_1m60_12-bits_2_tap_ext_trig.ccf';
-gd.Internal.imaging.dim = [512,512];
-gd.Internal.imaging.subsampleFactor = 2;
+gd.Internal.imaging.subsampleFactor = 1;
+gd.Internal.imaging.dim = repmat(1024/gd.Internal.imaging.subsampleFactor,1,2);
 gd.Experiment.imaging.frameRate = 59;   %hz
 gd.Experiment.imaging.numFrames2Avg = floor(59/2); % half second averaging of frames
 gd.Experiment.GreenImage = zeros(gd.Internal.imaging.dim);
@@ -54,17 +54,17 @@ gd.Internal.Display.position = [.225, .15, .5, .75];
 
 
 %% GREG'S SETTINGS
-% gd.Experiment.timing.baselineDur = 1;       %seconds
-% gd.Experiment.timing.stimDur = 1.5;         %seconds
-% gd.Experiment.timing.postDur = 1.5;         %seconds
-% gd.Experiment.timing.ITI = 8;               %seconds
-% gd.Experiment.timing.numTrials = 35;
-% gd.Experiment.timing.avgFirst = 1;          %seconds
-% gd.Experiment.timing.avgLast = 4;           %seconds
-% gd.Experiment.stim.frequency = 20;          %hz
-% gd.Experiment.stim.wailDuration = 0.02;     %seconds
-% gd.Experiment.stim.voltage = 5;             %volts
-% gd.Experiment.stim.bidirectional = false;   %boolean
+gd.Experiment.timing.baselineDur = 1;     %seconds
+gd.Experiment.timing.stimDur = 4;         %seconds
+gd.Experiment.timing.postDur = 2;         %seconds
+gd.Experiment.timing.ITI = 6;             %seconds
+gd.Experiment.timing.numTrials = 35;
+gd.Experiment.timing.avgFirst = 2;        %seconds
+gd.Experiment.timing.avgLast = 7;         %seconds
+gd.Experiment.stim.frequency = 20;        %hz
+gd.Experiment.stim.wailDuration = 0.02;   %seconds
+gd.Experiment.stim.voltage = 5;           %volts
+gd.Experiment.stim.bidirectional = true;  %boolean
 
 
 %% Generate GUI
@@ -1277,7 +1277,7 @@ for cindex = 1:Experiment.numStim
     Experiment.timing.avgLast(cindex) = temp{3};
     Mean(:,:,cindex) = mean(Experiment.Trial(:,:,Experiment.timing.avgFirst(cindex):Experiment.timing.avgLast(cindex),cindex),3);
 end
-Experiment.Trial = []; % saving is much faster
+Experiment.Trial = []; % don't save trial data to decrease file size and speed up saving
 
 % Determine CLim
 CLim = nan(Experiment.numStim,2);
@@ -1294,11 +1294,10 @@ end
 fprintf('Saving %d trials to file...',Experiment.timing.numTrials);
 save([Experiment.filename,'.mat'],'Experiment','Mean','-v7.3');
 for cindex = 1:gd.Experiment.numStim
-    figure('Name',sprintf('Stimulus %d final',cindex));
-    imagesc(Mean(:,:,cindex),CLim(cindex,:)); colormap gray; axis off;
-    Image = getframe(gca);
-    Image = Image.cdata;
-    imwrite(Image,[Experiment.filename,'_cond',num2str(cindex),'.tif']); % needs to have CLim
+    Image = Mean(:,:,cindex)-CLim(cindex,1);        % set min to 0
+    Image = Image/diff(CLim(cindex,:));             % set max to 1
+    Image = uint16(Image*double(intmax('uint16'))); % convert to 16-bit integer
+    imwrite(Image,[Experiment.filename,'_cond',num2str(cindex),'.tif']); % save image
 end
 fprintf('\tComplete\n');
         
